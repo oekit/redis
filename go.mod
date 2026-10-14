@@ -7,8 +7,8 @@ require (
 	github.com/redis/go-redis/extra/redisotel/v9 v9.22.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/yi-nology/ekit-concurrency v0.1.0
-	github.com/yi-nology/ekit-data v0.2.0
-	github.com/yi-nology/ekit-logx v0.1.0
+	github.com/yi-nology/ekit-data v0.2.1
+	github.com/yi-nology/ekit-logx v0.1.1
 )
 
 require (
