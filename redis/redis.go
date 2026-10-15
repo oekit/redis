@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	cache "github.com/oekit/data/data/cache"
+	"github.com/oekit/logx"
 	"github.com/redis/go-redis/v9"
-	cache "github.com/yi-nology/ekit-data/data/cache"
-	"github.com/yi-nology/ekit-logx"
 )
 
 var redisLog = logx.Delegating("cache-redis")

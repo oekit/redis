@@ -10,7 +10,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	cachepkg "github.com/yi-nology/ekit-data/data/cache"
+	cachepkg "github.com/oekit/data/data/cache"
 )
 
 // testUser 测试用数据类型。

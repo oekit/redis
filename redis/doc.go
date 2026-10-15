@@ -5,8 +5,8 @@
 // import 根包不再传递编译依赖 go-redis。
 //
 //	import (
-//		cache "github.com/yi-nology/ekit-data/data/cache"
-//		rediscache "github.com/yi-nology/ekit-redis/redis"
+//		cache "github.com/oekit/data/data/cache"
+//		rediscache "github.com/oekit/redis/redis"
 //	)
 //
 //	c := rediscache.NewRedisCache[User](rdb, rediscache.RedisConfig[User]{

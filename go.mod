@@ -1,14 +1,14 @@
-module github.com/yi-nology/ekit-redis
+module github.com/oekit/redis
 
 go 1.26.0
 
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/oekit/concurrency v0.1.3
+	github.com/oekit/data v0.3.2
+	github.com/oekit/logx v0.1.6
 	github.com/redis/go-redis/extra/redisotel/v9 v9.22.0
 	github.com/redis/go-redis/v9 v9.22.0
-	github.com/yi-nology/ekit-concurrency v0.1.1
-	github.com/yi-nology/ekit-data v0.3.1
-	github.com/yi-nology/ekit-logx v0.1.4
 )
 
 require (
