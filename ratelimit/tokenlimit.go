@@ -30,7 +30,8 @@ type TokenLimiter struct {
 
 	// 兜底配置
 	fallbackEnabled bool
-	pingInterval    time.Duration
+	pingInterval    time.Duration // 探活间隔
+	probeTimeout    time.Duration // 单次探活超时（与间隔解耦）
 
 	// 兜底运行态：redisAlive 无锁读（热路径），monitorStarted 仅在锁内迁移
 	rescueLock     sync.Mutex
@@ -60,6 +61,19 @@ func WithTokenPingInterval(d time.Duration) TokenOption {
 	}
 }
 
+// WithTokenProbeTimeout 设置单次探活的超时，默认 1s。与探活间隔
+// （WithTokenPingInterval）解耦：间隔决定"多久探一次"，超时决定"单次探测
+// 允许等多久"。超时须大于部署环境的正常 EVAL RT（如跨 region 常见几十到
+// 上百毫秒）——若超时小于 RT，每次探活都会超时误判为故障，降级永不回切。
+// d <= 0 时回退默认值。
+func WithTokenProbeTimeout(d time.Duration) TokenOption {
+	return func(l *TokenLimiter) {
+		if d > 0 {
+			l.probeTimeout = d
+		}
+	}
+}
+
 // NewTokenLimiter 创建分布式令牌桶限流器。
 //
 // rate 为每秒回补令牌数，burst 为桶容量（两者必须 > 0）；store 为任意
@@ -84,6 +98,7 @@ func NewTokenLimiter(rate, burst int, store redis.Scripter, keyPrefix string, op
 		tokenKey:      "{" + keyPrefix + "}.tokens",
 		timestampKey:  "{" + keyPrefix + "}.ts",
 		pingInterval:  defaultPingInterval,
+		probeTimeout:  defaultProbeTimeout,
 		rescueLimiter: newRescueLimiter(rate, burst),
 	}
 	l.redisAlive.Store(true)

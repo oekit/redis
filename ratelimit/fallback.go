@@ -11,6 +11,11 @@ import (
 // defaultPingInterval 兜底期间 Redis 探活默认间隔（沿用 go-zero 同名默认值）。
 const defaultPingInterval = 100 * time.Millisecond
 
+// defaultProbeTimeout 单次探活默认超时（与探活间隔解耦，见 WithTokenProbeTimeout）。
+// 上游探活无 sub-RT 死线，这里取 1s 同量级：足以覆盖跨 region 等高 RT 部署的
+// 正常 EVAL 往返；若超时小于 RT，探活将全部超时误判、降级永不回切。
+const defaultProbeTimeout = time.Second
+
 // newRescueLimiter 构建与 Redis 桶同参数的进程内兜底限流器。
 // rate 恒为正（NewTokenLimiter 已校验），不存在除零。
 func newRescueLimiter(rate, burst int) *xrate.Limiter {
@@ -63,10 +68,11 @@ func (l *TokenLimiter) waitForRedis() {
 
 // probe 探测 Redis 可用性：执行只含常量返回的最小 Lua 脚本（scripts.go probeLua）。
 // redis.Scripter 接口无 Ping，EVAL 常量脚本等价于"连通 + 脚本执行能力"探测。
-// 探活以独立 ctx 进行（不受单次请求 ctx 影响），超时取 pingInterval，
-// 防止挂死的连接把探活 goroutine 永久卡住。
+// 探活以独立 ctx 进行（不受单次请求 ctx 影响），超时取 probeTimeout
+// （WithTokenProbeTimeout，默认 1s，与 pingInterval 解耦）——高 RT 部署下
+// 单次探测慢但成功仍算存活；超时仅防挂死的连接把探活 goroutine 永久卡住。
 func (l *TokenLimiter) probe() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), l.pingInterval)
+	ctx, cancel := context.WithTimeout(context.Background(), l.probeTimeout)
 	defer cancel()
 	return probeScript.Run(ctx, l.store, nil).Err() == nil
 }

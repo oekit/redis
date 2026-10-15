@@ -14,7 +14,8 @@
 - `ratelimit.TokenLimiter`——Redis 令牌桶限流（双 key 惰性回补，Cluster
   hash-tag 同 slot）：`Allow(ctx)`/`AllowN(ctx, n)`；`WithTokenFallback()` 开启
   Redis 故障时进程内 golang.org/x/time/rate 本地兜底 + 后台探活自动回切
-  （`WithTokenPingInterval` 默认 100ms）；未开启时故障 fail-closed
+  （`WithTokenPingInterval` 默认 100ms，探活超时 `WithTokenProbeTimeout`
+  默认 1s、与间隔解耦）；未开启时故障 fail-closed
 - 存储抽象收 go-redis v9 `redis.Scripter` 接口（Client/ClusterClient/Ring 均可用）；
   全部 ctx-only API；后台 goroutine 经 `concurrency/async.GoSafe` recover
 

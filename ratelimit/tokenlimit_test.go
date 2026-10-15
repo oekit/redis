@@ -13,13 +13,15 @@ import (
 )
 
 // flakyScripter 可控故障的 Scripter 包装：fail=true 时所有脚本调用返回
-// 非 NOSCRIPT 的通信错误（模拟 Redis 故障），fail=false 时透传真实后端。
-// 记录脚本调用次数，用于判定"这次 Allow 走的是 Redis 还是本地兜底"。
+// 非 NOSCRIPT 的通信错误（模拟 Redis 故障）；fail=false 且 delay>0 时先
+// 睡 delay 再透传（模拟高 RT 但存活的 Redis）。记录脚本调用次数，用于
+// 判定"这次 Allow 走的是 Redis 还是本地兜底"。
 type flakyScripter struct {
 	inner redis.Scripter
 
 	mu        sync.Mutex
 	fail      bool
+	delay     time.Duration
 	callCount int
 }
 
@@ -33,6 +35,13 @@ func (f *flakyScripter) setFail(v bool) {
 	f.fail = v
 }
 
+// setSlow 设置成功调用的模拟 RT（sleep 后再透传）；0 = 不延迟.
+func (f *flakyScripter) setSlow(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.delay = d
+}
+
 // calls 返回累计脚本调用次数.
 func (f *flakyScripter) calls() int {
 	f.mu.Lock()
@@ -40,12 +49,12 @@ func (f *flakyScripter) calls() int {
 	return f.callCount
 }
 
-// recordCall 记一次脚本调用并返回当前故障开关.
-func (f *flakyScripter) recordCall() bool {
+// recordCall 记一次脚本调用并返回当前故障开关与模拟 RT.
+func (f *flakyScripter) recordCall() (fail bool, delay time.Duration) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.callCount++
-	return f.fail
+	return f.fail, f.delay
 }
 
 // boom 构造与 go-redis 应答形状一致的故障命令（非 NOSCRIPT、非 redis.Nil，
@@ -57,29 +66,45 @@ func boom() *redis.Cmd {
 // 各 Eval 变体逐一透传（EvalSha 路径收到的是脚本摘要，必须走 inner.EvalSha，
 // 不能混用 Eval，否则摘要会被当成脚本文本编译失败）.
 func (f *flakyScripter) Eval(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd {
-	if f.recordCall() {
+	fail, delay := f.recordCall()
+	if fail {
 		return boom()
+	}
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return f.inner.Eval(ctx, script, keys, args...)
 }
 
 func (f *flakyScripter) EvalSha(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd {
-	if f.recordCall() {
+	fail, delay := f.recordCall()
+	if fail {
 		return boom()
+	}
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return f.inner.EvalSha(ctx, sha1, keys, args...)
 }
 
 func (f *flakyScripter) EvalRO(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd {
-	if f.recordCall() {
+	fail, delay := f.recordCall()
+	if fail {
 		return boom()
+	}
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return f.inner.EvalRO(ctx, script, keys, args...)
 }
 
 func (f *flakyScripter) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd {
-	if f.recordCall() {
+	fail, delay := f.recordCall()
+	if fail {
 		return boom()
+	}
+	if delay > 0 {
+		time.Sleep(delay)
 	}
 	return f.inner.EvalShaRO(ctx, sha1, keys, args...)
 }
@@ -229,6 +254,45 @@ func TestTokenLimiter_Fallback_Recover(t *testing.T) {
 	}
 	if !l.redisAlive.Load() {
 		t.Fatal("expected redisAlive=true after recovery probe")
+	}
+
+	// 回切后判定重新经过 Redis（脚本调用计数继续增长）
+	callsBefore := flaky.calls()
+	if !l.Allow(ctx) {
+		t.Fatal("expected allow via redis after recovery")
+	}
+	if got := flaky.calls(); got <= callsBefore {
+		t.Fatalf("expected redis round-trip after recovery, calls %d -> %d", callsBefore, got)
+	}
+}
+
+func TestTokenLimiter_Fallback_Recover_SlowRedisAbovePingInterval(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(1000, 10, flaky, "b12",
+		WithTokenFallback(),
+		WithTokenPingInterval(20*time.Millisecond),  // 间隔 << 探测 RT
+		WithTokenProbeTimeout(500*time.Millisecond), // 超时 > 探测 RT：单次慢探测须能成功
+	)
+	ctx := context.Background()
+
+	// 触发降级
+	flaky.setFail(true)
+	if !l.Allow(ctx) {
+		t.Fatal("expected fallback allow")
+	}
+
+	// Redis 恢复但 RT 80ms > ping 间隔 20ms：探活超时与间隔耦合的实现里
+	// 每次探活都会超时误判 → 永久降级；解耦后必须正常回切
+	flaky.setFail(false)
+	flaky.setSlow(80 * time.Millisecond)
+
+	deadline := time.Now().Add(2 * time.Second)
+	for !l.redisAlive.Load() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !l.redisAlive.Load() {
+		t.Fatal("expected recovery despite probe RT > ping interval")
 	}
 
 	// 回切后判定重新经过 Redis（脚本调用计数继续增长）

@@ -52,6 +52,8 @@
 // [WithTokenFallback] 后，Redis 故障降级到进程内 golang.org/x/time/rate
 // 兜底限流（同 rate/burst 参数），后台 goroutine 按 [WithTokenPingInterval]
 // （默认 100ms）周期探活，成功一次即自动回切 Redis；探活期间兜底持续生效。
+// 单次探活的超时与间隔解耦（[WithTokenProbeTimeout]，默认 1s）：须大于部署
+// 环境的正常 EVAL RT（如跨 region），否则探测会因超时误判故障、降级永不回切。
 // 兜底参数与 Redis 桶一致，故障窗口内的实际放行速率不变，仅失去跨实例全局
 // 精确性（各进程各自持有一个等参本地桶）。
 //
