@@ -3,7 +3,7 @@ module github.com/oekit/redis
 go 1.24.0
 
 require (
-	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/oekit/concurrency v0.1.5
 	github.com/oekit/data v0.3.3
 	github.com/oekit/logx v0.1.9
