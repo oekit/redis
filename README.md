@@ -14,14 +14,29 @@
 go get github.com/oekit/redis@v0.1.4
 ```
 
-## 快速使用
+## 能做什么
 
+- **redisx.Client**：UniversalClient 封装，String/Hash/List/Set/Incr/Expire 全覆盖
+- **Batch**：管道批量 Get/Set/HSet/Incr
+- **BloomFilter**：内置布隆过滤器构造
+- **cache/redis**（子包）：data/cache 接口的 Redis 后端
+
+## 使用示例
+
+### 客户端 + 管道
 ```go
 import "github.com/oekit/redis/redisx"
 
-cli, err := redisx.NewClientFromConfig(ctx, redisx.RedisConfig{ /* Addr/DB/Pool */ })
+cli, _ := redisx.NewClientFromConfig(ctx, redisx.RedisConfig{ /* Addr/DB/PoolSize */ })
+cli.Set(ctx, "k", "v", time.Minute)
+b := cli.NewBatch()
+b.Set(ctx, "k1", "v1", time.Minute)
+b.Incr(ctx, "counter") // 一次 RTT 执行
 ```
-
+### 布隆过滤器
+```go
+bf, _ := cli.NewBloomFilter(ctx, "seen:uids", 0.001, 1_000_000)
+```
 ## 包清单
 
 - \`redisx/\` — Redis 客户端封装
