@@ -13,7 +13,7 @@ type RedisConfig struct {
 	DB       int    `yaml:"db"`
 }
 
-// NewClientFromConfig 从配置创建 Redis 客户端（含 OTel tracing）。
+// NewClientFromConfig 从配置创建 Redis 客户端（构造后立即 Ping 验证连通性）。
 //
 // 用法：
 //

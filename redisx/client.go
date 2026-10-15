@@ -4,11 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
-// Client 是带 key 前缀和 OTel 追踪的 Redis 客户端封装。
+// Client 是带 key 前缀的 Redis 客户端封装。
 type Client struct {
 	prefix string
 	client redis.UniversalClient
@@ -29,7 +28,12 @@ func WithPrefix(prefix string) RedisClientOptionFunc {
 }
 
 // NewClient 从 UniversalOptions 创建 Redis 客户端。
-// 自动注入 OpenTelemetry 追踪。
+//
+// 零可观测性副作用：不自动注入任何 tracing。需要 OpenTelemetry span 时
+// 用装饰器显式接入（无 SDK 时 noop）：
+//
+//	c, _ := redisx.NewClient(opt)
+//	_ = redisotel.InstrumentTracing(c.Client()) // github.com/oekit/tracing/redisotel
 func NewClient(opt *redis.UniversalOptions, opts ...RedisClientOptionFunc) (*Client, error) {
 	o := &RedisClientOption{}
 	for _, fn := range opts {
@@ -57,12 +61,6 @@ func NewClient(opt *redis.UniversalOptions, opts ...RedisClientOptionFunc) (*Cli
 	}
 
 	client := redis.NewUniversalClient(opt)
-
-	if err := redisotel.InstrumentTracing(client); err != nil {
-		// 失败路径必须回收已拨号的连接池，否则每次构造失败泄漏一个 client
-		_ = client.Close()
-		return nil, err
-	}
 
 	return &Client{
 		prefix: o.Prefix,
