@@ -21,6 +21,7 @@ go get github.com/oekit/redis@v0.2.0
 |---|---|
 | `redisx` | Redis 客户端封装（`NewClientFromConfig`） |
 | `distlock` | 分布式锁 |
+| `ratelimit` | 分布式限流——固定窗口 + 令牌桶（Lua 三态 + 故障本地兜底，存储抽象收 `redis.Scripter`） |
 | `redis` | [data](https://github.com/oekit/data) 缓存接口的 Redis 后端实现 |
 
 ## 快速使用

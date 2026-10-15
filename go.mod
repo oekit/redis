@@ -8,6 +8,7 @@ require (
 	github.com/oekit/data v0.3.3
 	github.com/oekit/logx v0.1.9
 	github.com/redis/go-redis/v9 v9.23.0
+	golang.org/x/time v0.16.0
 )
 
 require (

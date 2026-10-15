@@ -1,0 +1,364 @@
+package ratelimit
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+// flakyScripter 可控故障的 Scripter 包装：fail=true 时所有脚本调用返回
+// 非 NOSCRIPT 的通信错误（模拟 Redis 故障），fail=false 时透传真实后端。
+// 记录脚本调用次数，用于判定"这次 Allow 走的是 Redis 还是本地兜底"。
+type flakyScripter struct {
+	inner redis.Scripter
+
+	mu        sync.Mutex
+	fail      bool
+	callCount int
+}
+
+func newFlakyScripter(inner redis.Scripter) *flakyScripter {
+	return &flakyScripter{inner: inner}
+}
+
+func (f *flakyScripter) setFail(v bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fail = v
+}
+
+// calls 返回累计脚本调用次数.
+func (f *flakyScripter) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.callCount
+}
+
+// recordCall 记一次脚本调用并返回当前故障开关.
+func (f *flakyScripter) recordCall() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.callCount++
+	return f.fail
+}
+
+// boom 构造与 go-redis 应答形状一致的故障命令（非 NOSCRIPT、非 redis.Nil，
+// Script.Run 不会误判回退路径）.
+func boom() *redis.Cmd {
+	return redis.NewCmdResult(nil, errors.New("flaky: redis is down"))
+}
+
+// 各 Eval 变体逐一透传（EvalSha 路径收到的是脚本摘要，必须走 inner.EvalSha，
+// 不能混用 Eval，否则摘要会被当成脚本文本编译失败）.
+func (f *flakyScripter) Eval(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd {
+	if f.recordCall() {
+		return boom()
+	}
+	return f.inner.Eval(ctx, script, keys, args...)
+}
+
+func (f *flakyScripter) EvalSha(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd {
+	if f.recordCall() {
+		return boom()
+	}
+	return f.inner.EvalSha(ctx, sha1, keys, args...)
+}
+
+func (f *flakyScripter) EvalRO(ctx context.Context, script string, keys []string, args ...any) *redis.Cmd {
+	if f.recordCall() {
+		return boom()
+	}
+	return f.inner.EvalRO(ctx, script, keys, args...)
+}
+
+func (f *flakyScripter) EvalShaRO(ctx context.Context, sha1 string, keys []string, args ...any) *redis.Cmd {
+	if f.recordCall() {
+		return boom()
+	}
+	return f.inner.EvalShaRO(ctx, sha1, keys, args...)
+}
+
+func (f *flakyScripter) ScriptExists(ctx context.Context, hashes ...string) *redis.BoolSliceCmd {
+	return f.inner.ScriptExists(ctx, hashes...)
+}
+
+func (f *flakyScripter) ScriptLoad(ctx context.Context, script string) *redis.StringCmd {
+	return f.inner.ScriptLoad(ctx, script)
+}
+
+func TestTokenLimiter_BurstConsume(t *testing.T) {
+	store, mr := newTestStore(t)
+	l := NewTokenLimiter(2, 3, store, "b1")
+	ctx := context.Background()
+
+	// burst 内全部放行
+	for i := 0; i < 3; i++ {
+		if !l.Allow(ctx) {
+			t.Fatalf("allow %d: expected true within burst", i+1)
+		}
+	}
+	// 超出 burst 拒绝（Lua false → redis.Nil）
+	if l.Allow(ctx) {
+		t.Fatal("expected false beyond burst")
+	}
+
+	// 桶标识 → hash-tag 双 key
+	if !mr.Exists("{b1}.tokens") || !mr.Exists("{b1}.ts") {
+		t.Fatalf("expected bucket keys to exist, got keys %v", mr.Keys())
+	}
+}
+
+func TestTokenLimiter_Refill_BackdatedTimestamp(t *testing.T) {
+	store, mr := newTestStore(t)
+	l := NewTokenLimiter(2, 2, store, "b2")
+	ctx := context.Background()
+
+	// 耗尽
+	if !l.Allow(ctx) || !l.Allow(ctx) {
+		t.Fatal("expected initial burst to be allowed")
+	}
+	if l.Allow(ctx) {
+		t.Fatal("expected false when bucket drained")
+	}
+
+	// 不 sleep：直接回写 ts key 模拟"距上次回补已过 10s"（确定性时间回补）。
+	// 速率 2/s × 10s = 20 ≥ burst，桶应回满。
+	if err := mr.Set("{b2}.ts", strconv.FormatInt(time.Now().Add(-10*time.Second).Unix(), 10)); err != nil {
+		t.Fatal(err)
+	}
+	if !l.Allow(ctx) {
+		t.Fatal("expected true after refill")
+	}
+	if !l.Allow(ctx) {
+		t.Fatal("expected burst to be full after long idle")
+	}
+	if l.Allow(ctx) {
+		t.Fatal("expected false after refilled burst consumed")
+	}
+}
+
+func TestTokenLimiter_AllowN(t *testing.T) {
+	store, _ := newTestStore(t)
+	l := NewTokenLimiter(1, 5, store, "b3")
+	ctx := context.Background()
+
+	if !l.AllowN(ctx, 3) {
+		t.Fatal("expected AllowN(3) true")
+	}
+	if !l.AllowN(ctx, 2) {
+		t.Fatal("expected AllowN(2) true (exactly burst)")
+	}
+	if l.AllowN(ctx, 1) {
+		t.Fatal("expected AllowN(1) false when drained")
+	}
+	// n <= 0 恒放行且不触碰 Redis
+	if !l.AllowN(ctx, 0) || !l.AllowN(ctx, -1) {
+		t.Fatal("expected AllowN with n<=0 to be trivially true")
+	}
+}
+
+func TestTokenLimiter_NoFallback_FailClosed(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(100, 10, flaky, "b4")
+	ctx := context.Background()
+
+	// 未开启兜底：Redis 故障一律拒绝
+	flaky.setFail(true)
+	if l.Allow(ctx) {
+		t.Fatal("expected fail-closed without WithTokenFallback")
+	}
+}
+
+func TestTokenLimiter_Fallback_Engage(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(1000, 10, flaky, "b5",
+		WithTokenFallback(), WithTokenPingInterval(5*time.Millisecond))
+	ctx := context.Background()
+
+	flaky.setFail(true)
+
+	// 首次：尝试 Redis（失败）→ 降级本地桶放行
+	if !l.Allow(ctx) {
+		t.Fatal("expected fallback to allow first request")
+	}
+	callsAfterFirst := flaky.calls()
+	if callsAfterFirst == 0 {
+		t.Fatal("expected at least one redis script attempt")
+	}
+
+	// 后续：redisAlive 已翻转，判定直接走本地桶，不再触碰 Redis
+	for i := 0; i < 5; i++ {
+		if !l.Allow(ctx) {
+			t.Fatalf("allow %d: expected local fallback to allow", i+1)
+		}
+	}
+	if got := flaky.calls(); got != callsAfterFirst {
+		t.Fatalf("expected no redis traffic while in fallback, calls %d -> %d", callsAfterFirst, got)
+	}
+	if l.redisAlive.Load() {
+		t.Fatal("expected redisAlive=false while redis is down")
+	}
+}
+
+func TestTokenLimiter_Fallback_Recover(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(1000, 10, flaky, "b6",
+		WithTokenFallback(), WithTokenPingInterval(5*time.Millisecond))
+	ctx := context.Background()
+
+	// 触发降级
+	flaky.setFail(true)
+	if !l.Allow(ctx) {
+		t.Fatal("expected fallback allow")
+	}
+
+	// Redis 恢复：探活成功 → 自动回切
+	flaky.setFail(false)
+	deadline := time.Now().Add(2 * time.Second)
+	for !l.redisAlive.Load() && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+	if !l.redisAlive.Load() {
+		t.Fatal("expected redisAlive=true after recovery probe")
+	}
+
+	// 回切后判定重新经过 Redis（脚本调用计数继续增长）
+	callsBefore := flaky.calls()
+	if !l.Allow(ctx) {
+		t.Fatal("expected allow via redis after recovery")
+	}
+	if got := flaky.calls(); got <= callsBefore {
+		t.Fatalf("expected redis round-trip after recovery, calls %d -> %d", callsBefore, got)
+	}
+}
+
+func TestTokenLimiter_Fallback_MiniRedisClosed(t *testing.T) {
+	store, mr := newTestStoreFastFail(t)
+	l := NewTokenLimiter(1000, 10, store, "b7",
+		WithTokenFallback(), WithTokenPingInterval(5*time.Millisecond))
+	ctx := context.Background()
+
+	// 真实故障路径：Close miniredis → 连接失败 → 走本地兜底仍然放行
+	mr.Close()
+	for i := 0; i < 3; i++ {
+		if !l.Allow(ctx) {
+			t.Fatalf("allow %d: expected local fallback allow after redis closed", i+1)
+		}
+	}
+}
+
+func TestTokenLimiter_CtxCanceled_NoFallbackTrigger(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(1000, 10, flaky, "b8",
+		WithTokenFallback(), WithTokenPingInterval(5*time.Millisecond))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// 调用方 ctx 取消不是 Redis 故障：拒绝但不触发兜底
+	if l.Allow(ctx) {
+		t.Fatal("expected false on canceled ctx")
+	}
+	if !l.redisAlive.Load() {
+		t.Fatal("canceled ctx must not engage fallback")
+	}
+	if !l.Allow(context.Background()) {
+		t.Fatal("expected healthy redis allow after canceled ctx")
+	}
+}
+
+func TestTokenLimiter_UnknownResponse_FailClosed(t *testing.T) {
+	l := NewTokenLimiter(1000, 10, stubScripter{val: "not-an-int"}, "b9")
+	if l.Allow(context.Background()) {
+		t.Fatal("expected fail-closed on unknown response")
+	}
+}
+
+func TestTokenLimiter_UnknownResponse_FallbackEngages(t *testing.T) {
+	l := NewTokenLimiter(1000, 10, stubScripter{val: "not-an-int"}, "b10",
+		WithTokenFallback(), WithTokenPingInterval(5*time.Millisecond))
+	if !l.Allow(context.Background()) {
+		t.Fatal("expected fallback allow on unknown response")
+	}
+	if l.redisAlive.Load() {
+		t.Fatal("expected redisAlive=false after unknown response")
+	}
+}
+
+func TestTokenLimiter_PanicOnInvalidParams(t *testing.T) {
+	store, _ := newTestStore(t)
+
+	for name, fn := range map[string]func(){
+		"zero rate":     func() { NewTokenLimiter(0, 10, store, "x") },
+		"negative rate": func() { NewTokenLimiter(-1, 10, store, "x") },
+		"zero burst":    func() { NewTokenLimiter(10, 0, store, "x") },
+		"empty prefix":  func() { NewTokenLimiter(10, 10, store, "") },
+	} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("%s: expected panic", name)
+				}
+			}()
+			fn()
+		}()
+	}
+}
+
+func TestTokenLimiter_Concurrent_AllowAndFallbackToggle(t *testing.T) {
+	store, _ := newTestStore(t)
+	flaky := newFlakyScripter(store)
+	l := NewTokenLimiter(10000, 1000, flaky, "b11",
+		WithTokenFallback(), WithTokenPingInterval(2*time.Millisecond))
+	ctx := context.Background()
+
+	stop := make(chan struct{})
+	var toggleWG sync.WaitGroup
+	toggleWG.Add(1)
+	go func() {
+		defer toggleWG.Done()
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		fail := false
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				fail = !fail
+				flaky.setFail(fail)
+			}
+		}
+	}()
+
+	var loadWG sync.WaitGroup
+	var allowed atomic.Int64
+	for g := 0; g < 8; g++ {
+		loadWG.Add(1)
+		go func() {
+			defer loadWG.Done()
+			for i := 0; i < 50; i++ {
+				if l.AllowN(ctx, 1) {
+					allowed.Add(1)
+				}
+			}
+		}()
+	}
+	loadWG.Wait()
+	close(stop)
+	toggleWG.Wait()
+
+	if allowed.Load() == 0 {
+		t.Fatal("expected at least one allowed request")
+	}
+}
