@@ -496,13 +496,12 @@ func TestNewClientFromConfig(t *testing.T) {
 }
 
 func TestNewClient_InvalidAddr(t *testing.T) {
-	// 不可用地址：NewClient 只在 redisotel.InstrumentTracing 失败时返回 error，
-	// 否则仅在第一次命令时连接失败。这里只验证返回的 client 不为 nil。
+	// 不可用地址：客户端是惰性连接，NewClient 不做强制 tracing 注入后
+	// 构造恒成功；连接失败只在第一次命令时暴露。
 	opt := &redis.UniversalOptions{Addrs: []string{"127.0.0.1:1"}}
 	c, err := NewClient(opt)
 	if err != nil {
-		// 如果这里就返回 error（OTel instrument 失败）也接受
-		return
+		t.Fatalf("expected NewClient to succeed (lazy connect), got %v", err)
 	}
 	defer c.Close()
 	if c == nil {

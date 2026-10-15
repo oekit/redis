@@ -8,7 +8,7 @@
 ## 安装
 
 ```bash
-go get github.com/oekit/redis@v0.1.5
+go get github.com/oekit/redis@v0.2.0
 ```
 
 ## 这个仓库做什么
@@ -29,6 +29,14 @@ go get github.com/oekit/redis@v0.1.5
 import "github.com/oekit/redis/redisx"
 
 cli, err := redisx.NewClientFromConfig(ctx, redisx.RedisConfig{ /* Addr/DB/Pool */ })
+```
+
+tracing 接入（显式装饰器，零注入默认）：
+
+```go
+import redisotel "github.com/oekit/tracing/redisotel"
+
+_ = redisotel.InstrumentTracing(cli.Client()) // 无 SDK 时 noop
 ```
 
 ## 边界
