@@ -4,6 +4,14 @@
 
 
 
+## [v0.6.1] — 2026-10-16
+
+- fix(ratelimit): 探活应答形态校验——`probe()` 此前只检查 `Err()==nil`，探活脚本应答形态
+  异常（代理损坏、不兼容实现、mock 残缺应答）会被误判为已恢复、立刻回切 Redis；现要求
+  应答为整数 1（probeLua 常量），否则保持兜底等待下一次探测。消除 TokenLimiter 兜底
+  回切与后台探活 goroutine 的竞态闪烁
+  （`TestTokenLimiter_UnknownResponse_FallbackEngages` 修复前 5 跑 1 挂）
+
 ## [v0.5.1] — 2026-10-17
 
 - **docs**：CHANGELOG 版本段勘误（改名段实为 v0.5.0，与 v0.4.0 契约段重名问题修正）；README 补
