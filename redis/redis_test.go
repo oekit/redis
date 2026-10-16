@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	cachepkg "github.com/oekit/data/data/cache"
+	cachepkg "github.com/oekit/data/cache"
 )
 
 // testUser 测试用数据类型。
@@ -564,6 +565,145 @@ func TestRedisCache_SetRawEmptyBytes_NotNullMarker(t *testing.T) {
 	}
 }
 
+// TestRedisCache_SetRawLegacySentinel_NotNullMarker 回归（v0.4.0 哨兵迁移）：
+// 旧哨兵 "__NULL__" 可被 SetRaw 合法写入精确碰撞——旧实现读路径把它误判为
+// null marker（"数据不存在"，GetOrLoad 永久不回源）。新哨兵改为 \x00 保留
+// 前缀后，该字面值必须作为普通数据往返。passthrough 编解码（raw 字节即
+// 字符串）忠实还原"裸字节恰好等于旧哨兵"的碰撞场景。
+func TestRedisCache_SetRawLegacySentinel_NotNullMarker(t *testing.T) {
+	client, _ := newTestRedisClient(t)
+	var sourceCalls int
+	c := NewRedisCache[string](client, RedisConfig[string]{
+		Prefix: "x:",
+		TTL:    time.Minute,
+		Serializer: func(v *string) ([]byte, error) {
+			return []byte(*v), nil
+		},
+		Deserializer: func(data []byte, v *string) error {
+			*v = string(data)
+			return nil
+		},
+		Source: func(ctx context.Context, key string) (*string, error) {
+			sourceCalls++
+			s := "from-source"
+			return &s, nil
+		},
+	})
+	ctx := context.Background()
+
+	if err := c.SetRaw(ctx, "legacy", []byte("__NULL__"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	// Get 必须返回 "__NULL__" 字符串本身，不得误判 null
+	got, err := c.Get(ctx, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || *got != "__NULL__" {
+		t.Errorf(`"__NULL__" 应作为普通值往返，got (%+v, %v)`, got, err)
+	}
+
+	// GetOrLoad 命中已存值：返回该值且不回源（旧实现误判 null 时返回 (nil, nil)）
+	got, err = c.GetOrLoad(ctx, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || *got != "__NULL__" {
+		t.Errorf(`GetOrLoad 应返回 "__NULL__" 本身，got (%+v, %v)`, got, err)
+	}
+	if sourceCalls != 0 {
+		t.Errorf("已有缓存值不应回源，Source 被调用 %d 次", sourceCalls)
+	}
+
+	// GetBytes 原样返回
+	raw, err := c.GetBytes(ctx, "legacy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "__NULL__" {
+		t.Errorf("GetBytes 应原样返回 %q, got %q", "__NULL__", raw)
+	}
+
+	// JSON 路径不受哨兵迁移影响：默认编解码走 json.Marshal（字符串带
+	// 引号，写入 "\"__NULL__\""），从未与裸哨兵精确相等
+	jc := NewRedisCache[string](client, RedisConfig[string]{Prefix: "x:", TTL: time.Minute})
+	if err := jc.Set(ctx, "json-k", stringPtr("__NULL__")); err != nil {
+		t.Fatal(err)
+	}
+	got, err = jc.Get(ctx, "json-k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || *got != "__NULL__" {
+		t.Errorf("JSON 路径的 \"__NULL__\" 值应正常往返，got (%+v, %v)", got, err)
+	}
+}
+
+// TestRedisCache_SetRawReservedPrefix_NullMarker 契约文档化测试（v0.4.0）：
+// 以 \x00 开头的值保留为 null 标记前缀——SetRaw 写入精确哨兵字节后，读路径
+// 按 null marker 处理（Get/GetBytes 返回 nil、GetOrLoad 不回源）。边界：
+// \x00 开头但非精确哨兵的值**不认作** null（保留的是前缀空间，不是前缀
+// 通配），走反序列化正常往返。
+func TestRedisCache_SetRawReservedPrefix_NullMarker(t *testing.T) {
+	client, _ := newTestRedisClient(t)
+	var sourceCalls int
+	c := NewRedisCache[string](client, RedisConfig[string]{
+		Prefix: "x:",
+		TTL:    time.Minute,
+		Serializer: func(v *string) ([]byte, error) {
+			return []byte(*v), nil
+		},
+		Deserializer: func(data []byte, v *string) error {
+			*v = string(data)
+			return nil
+		},
+		Source: func(ctx context.Context, key string) (*string, error) {
+			sourceCalls++
+			s := "from-source"
+			return &s, nil
+		},
+	})
+	ctx := context.Background()
+
+	// 精确哨兵字节：按 null marker 处理
+	if err := c.SetRaw(ctx, "reserved", []byte(nullValue), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.Get(ctx, "reserved")
+	if err != nil || got != nil {
+		t.Errorf("保留哨兵应按 null marker 处理（Get 返回 (nil, nil)），got (%+v, %v)", got, err)
+	}
+	raw, err := c.GetBytes(ctx, "reserved")
+	if err != nil || raw != nil {
+		t.Errorf("GetBytes 对 null marker 应返回 nil，got (%v, %v)", raw, err)
+	}
+	if exists, e := c.Exists(ctx, "reserved"); e != nil || !exists {
+		t.Errorf("null marker 应计存在（Exists=true），got exists=%v err=%v", exists, e)
+	}
+	got, err = c.GetOrLoad(ctx, "reserved")
+	if err != nil || got != nil {
+		t.Errorf("GetOrLoad 命中保留哨兵应返回 (nil, nil)，got (%+v, %v)", got, err)
+	}
+	if sourceCalls != 0 {
+		t.Errorf("null marker 防穿透：Source 不应被调用，got %d 次", sourceCalls)
+	}
+
+	// 边界：\x00 开头但非精确哨兵 → 不认作 null（passthrough 正常往返）
+	if err := c.SetRaw(ctx, "boundary", []byte("\x00other"), time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	got, err = c.Get(ctx, "boundary")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || *got != "\x00other" {
+		t.Errorf("\\x00 开头非哨兵值不应被当作 null marker，got (%+v, %v)", got, err)
+	}
+}
+
+func stringPtr(s string) *string { return &s }
+
 func TestDefaultSerializer(t *testing.T) {
 	user := &testUser{ID: 1, Name: "test"}
 	data, err := defaultSerializer(user)
@@ -608,8 +748,15 @@ func TestRedisConfig_Defaults(t *testing.T) {
 }
 
 func TestNullValue(t *testing.T) {
-	if nullValue != "__NULL__" {
-		t.Errorf("expected '__NULL__', got %q", nullValue)
+	// v0.4.0 起哨兵改为 \x00 保留前缀：合法 JSON 序列化输出不会出现以
+	// 裸 \x00 开头的字节，SetRaw 写入的普通值不会自然碰撞（旧 "__NULL__"
+	// 可被 SetRaw 精确碰撞，已废弃）
+	const want = "\x00oekit:null"
+	if nullValue != want {
+		t.Errorf("expected %q, got %q", want, nullValue)
+	}
+	if !strings.HasPrefix(nullValue, "\x00") {
+		t.Error("nullValue 必须以 \\x00 开头（保留前缀契约）")
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	cache "github.com/oekit/data/data/cache"
+	"github.com/oekit/data/cache"
 	"github.com/oekit/logx"
 	"github.com/redis/go-redis/v9"
 )
@@ -50,6 +50,16 @@ type RedisCache[T any] struct {
 	cfg     RedisConfig[T]
 	nullTTL time.Duration
 }
+
+// 编译期接口契约：RedisCache 实现 data/cache 门面接口（泛型接口取具体
+// 类型实例化断言，int/string 双类型覆盖）。接口语义（miss 非 error、
+// null marker 防穿透、Del 幂等等）由 github.com/oekit/data/cachetest
+// 契约套件跨实现固化，本包 contract_suite_test.go 接入。
+var (
+	_ cache.Cache[int]         = (*RedisCache[int])(nil)
+	_ cache.CacheAside[int]    = (*RedisCache[int])(nil)
+	_ cache.CacheAside[string] = (*RedisCache[string])(nil)
+)
 
 // NewRedisCache 创建一个基于 Redis 的泛型缓存实例。
 func NewRedisCache[T any](client redis.UniversalClient, cfg RedisConfig[T]) *RedisCache[T] {
@@ -222,6 +232,11 @@ func (c *RedisCache[T]) SetWithTTL(ctx context.Context, key string, value *T, tt
 }
 
 // SetRaw 设置原始字节数据（不经过序列化）。
+//
+// 契约约束：data 不得以 \x00 开头——该前缀保留为 null 标记（见 nullValue）。
+// 写入精确等于哨兵的字节会被读路径按 null marker 处理（Get/GetBytes 返回
+// nil、GetOrLoad 不回源）；写入其他 \x00 开头值属违反契约，不认作 null，
+// 走反序列化（默认 JSON 下报错）。
 func (c *RedisCache[T]) SetRaw(ctx context.Context, key string, data []byte, ttl time.Duration) error {
 	return c.client.Set(ctx, c.fullKey(key), data, ttl).Err()
 }
@@ -232,7 +247,12 @@ func (c *RedisCache[T]) Del(ctx context.Context, key string) error {
 }
 
 // DelBatch 批量删除缓存。
+// 空 keys 为幂等 no-op（不报错）——Redis DEL 要求至少 1 个 key，裸 DEL
+// 会报 wrong number of arguments，此处显式短路对齐 cachetest 契约。
 func (c *RedisCache[T]) DelBatch(ctx context.Context, keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
 	fullKeys := make([]string, len(keys))
 	for i, key := range keys {
 		fullKeys[i] = c.fullKey(key)
@@ -262,7 +282,19 @@ func (c *RedisCache[T]) fullKey(key string) string {
 	return c.cfg.Prefix + key
 }
 
-const nullValue = "__NULL__"
+// nullValue 是 null marker（空值缓存标记）的哨兵字节串。
+//
+// 保留前缀契约：以 \x00 开头的值保留为 null 标记专用——合法 JSON 序列化
+// 输出不会出现以裸 \x00 开头的字节（控制字符会被转义为 \u0000 文本），
+// 普通值不会自然撞上该前缀；SetRaw 等原始写入入口**不得写入以 \x00
+// 开头的值**。读路径按**精确相等**识别 null marker：等于 nullValue 的
+// 条目按 null 处理（Get/GetBytes 返回 nil、GetOrLoad 不回源）；其余
+// \x00 开头值不认作 null（走反序列化，默认 JSON 下报错）——保留的是
+// 前缀空间，不是前缀通配语义。
+//
+// 历史：v0.4.0 前哨兵为 "__NULL__"，可被 SetRaw 合法写入精确碰撞（写入
+// 字面 "__NULL__" 即被永久误判为"数据不存在"），故改为 \x00 保留前缀。
+const nullValue = "\x00oekit:null"
 
 func defaultSerializer[T any](v *T) ([]byte, error) {
 	return json.Marshal(v)
