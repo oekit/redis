@@ -12,8 +12,8 @@ github.com/klauspost/cpuid/v2 v2.4.0 h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV91
 github.com/klauspost/cpuid/v2 v2.4.0/go.mod h1:19jmZ9mjzoF//ddRSUsv0zfBTJWh3QJh9FNxZTMrGxU=
 github.com/oekit/concurrency v0.1.5 h1:JWfLpx6Px9Z7OxgbfDJq44GrwMHxcQB5imlxGI6Zdlk=
 github.com/oekit/concurrency v0.1.5/go.mod h1:xk/LQF3CDJCp8nZfpWiNcA0Bckt3/xJRtvxQynlsxu0=
-github.com/oekit/data v0.3.3 h1:VzTWO5aJbx1//NdRMbOcDSAt95yDK7aU4VH4egjDTM8=
-github.com/oekit/data v0.3.3/go.mod h1:ww1ejzbe1x5e9U11TK18G8EDgpm9UwoIatud/YvrBB4=
+github.com/oekit/data v0.4.0 h1:QxynY5oQfChZhToUK38nswYrSw5eOxFNxYNQSkaLWnw=
+github.com/oekit/data v0.4.0/go.mod h1:ww1ejzbe1x5e9U11TK18G8EDgpm9UwoIatud/YvrBB4=
 github.com/oekit/logx v0.1.9 h1:sCqL9oRN3loYhp7wFym2PxHwMYclugK/33CVhtCPGlI=
 github.com/oekit/logx v0.1.9/go.mod h1:9/DxyOPDAZHBUQ5CfJFIlhyJImJ2bHkNp8jSUQzQZTY=
 github.com/redis/go-redis/v9 v9.23.0 h1:/TTVdJa8BRNsybwwGGnmiYktHNlUXtbOQxlWpHBPL3s=
