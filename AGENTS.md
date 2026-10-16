@@ -1,7 +1,7 @@
 # AGENTS.md — oekit/redis
 
 > redisx 客户端封装 + distlock 分布式锁 + ratelimit 分布式限流 + data/cache 的 Redis 后端
-> 当前版本：`v0.2.0` · module：`github.com/oekit/redis` · org：[oekit = Open Easy Kit](https://oekit.github.io)
+> 当前版本：`v0.3.0` · module：`github.com/oekit/redis` · org：[oekit = Open Easy Kit](https://oekit.github.io)
 
 ## 本仓包含
 `distlock/`、`ratelimit/`、`redis/`、`redisx/`
