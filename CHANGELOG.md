@@ -2,6 +2,12 @@
 
 由 ekit v0.34.0（git.enjoye.top/enjoydream/ekit，冻结维护）拆分而来。所有 notable 变更记录如下。
 
+
+## [v0.3.1] — 2026-10-16
+
+- ⚠️ 旧路径最后版本：模块已更名为 github.com/oekit/redisx（v0.4.0 起使用新路径）；
+  本版本代码与 v0.3.0 完全一致，仅 README 挂弃用通告
+
 ## [v0.4.0] — 2026-10-16
 
 RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 哨兵碰撞修复。
