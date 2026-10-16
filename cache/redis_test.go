@@ -628,8 +628,8 @@ func TestRedisCache_SetRawLegacySentinel_NotNullMarker(t *testing.T) {
 	// JSON 路径不受哨兵迁移影响：默认编解码走 json.Marshal（字符串带
 	// 引号，写入 "\"__NULL__\""），从未与裸哨兵精确相等
 	jc := NewRedisCache[string](client, RedisConfig[string]{Prefix: "x:", TTL: time.Minute})
-	if err := jc.Set(ctx, "json-k", stringPtr("__NULL__")); err != nil {
-		t.Fatal(err)
+	if setErr := jc.Set(ctx, "json-k", stringPtr("__NULL__")); setErr != nil {
+		t.Fatal(setErr)
 	}
 	got, err = jc.Get(ctx, "json-k")
 	if err != nil {
@@ -690,8 +690,8 @@ func TestRedisCache_SetRawReservedPrefix_NullMarker(t *testing.T) {
 	}
 
 	// 边界：\x00 开头但非精确哨兵 → 不认作 null（passthrough 正常往返）
-	if err := c.SetRaw(ctx, "boundary", []byte("\x00other"), time.Minute); err != nil {
-		t.Fatal(err)
+	if rawErr := c.SetRaw(ctx, "boundary", []byte("\x00other"), time.Minute); rawErr != nil {
+		t.Fatal(rawErr)
 	}
 	got, err = c.Get(ctx, "boundary")
 	if err != nil {

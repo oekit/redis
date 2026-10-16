@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oekit/pkg/cache"
 	"github.com/oekit/logx"
+	"github.com/oekit/pkg/cache"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -259,6 +259,52 @@ func (c *RedisCache[T]) DelBatch(ctx context.Context, keys ...string) error {
 	}
 	return c.client.Del(ctx, fullKeys...).Err()
 }
+
+// MGet 批量获取（管道一次往返，契约见 pkg/cache.BatchGetter——缺席语义
+// 与 (nil, nil) 双关一致：不存在与 null marker 一律缺席；纯读不回填、
+// 不触发 Source）。反序列化失败按整批错误处理（与单键 Get 同口径）。
+// 缺席键的消费方应回退 GetOrLoad——真 miss 回源回填，marker 命中在
+// 本实现的 GetOrLoad 内短路，两种情况都不会重复回源。
+func (c *RedisCache[T]) MGet(ctx context.Context, keys ...string) (map[string]*T, error) {
+	if len(keys) == 0 {
+		return map[string]*T{}, nil
+	}
+	fullKeys := make([]string, len(keys))
+	for i, key := range keys {
+		fullKeys[i] = c.fullKey(key)
+	}
+	res, err := c.client.MGet(ctx, fullKeys...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("cache mget: %w", err)
+	}
+
+	out := make(map[string]*T, len(keys))
+	for i, raw := range res {
+		if raw == nil {
+			continue // key 不存在
+		}
+		s, ok := raw.(string)
+		if !ok {
+			continue
+		}
+		if s == nullValue {
+			continue // null marker 命中：缺席（消费方回退 GetOrLoad 享受短路）
+		}
+		if len(s) == 0 {
+			continue // 损坏条目按 miss（与 getInternal 口径一致）
+		}
+		var v T
+		if err := c.cfg.Deserializer([]byte(s), &v); err != nil {
+			return nil, fmt.Errorf("cache deserialize: %w", err)
+		}
+		out[keys[i]] = &v
+	}
+	return out, nil
+}
+
+// 编译期能力契约：RedisCache 具备批量读取能力。
+var _ cache.BatchGetter[int] = (*RedisCache[int])(nil)
+var _ cache.BatchGetter[string] = (*RedisCache[string])(nil)
 
 // Exists 检查缓存是否存在。
 func (c *RedisCache[T]) Exists(ctx context.Context, key string) (bool, error) {
