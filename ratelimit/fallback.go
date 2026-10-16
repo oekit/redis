@@ -71,8 +71,15 @@ func (l *TokenLimiter) waitForRedis() {
 // 探活以独立 ctx 进行（不受单次请求 ctx 影响），超时取 probeTimeout
 // （WithTokenProbeTimeout，默认 1s，与 pingInterval 解耦）——高 RT 部署下
 // 单次探测慢但成功仍算存活；超时仅防挂死的连接把探活 goroutine 永久卡住。
+// 除无错误外还校验应答形态：探活脚本恒返回整数 1，应答残缺（类型或值不符）
+// 说明执行路径异常（代理损坏、不兼容实现），视同失败继续兜底。
 func (l *TokenLimiter) probe() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), l.probeTimeout)
 	defer cancel()
-	return probeScript.Run(ctx, l.store, nil).Err() == nil
+	resp, err := probeScript.Run(ctx, l.store, nil).Result()
+	if err != nil {
+		return false
+	}
+	v, ok := resp.(int64)
+	return ok && v == 1
 }
