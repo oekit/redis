@@ -1,4 +1,4 @@
-// Package redis 提供基于 go-redis 的 Cache[T] 分布式缓存实现。
+// Package cache 提供基于 go-redis 的 Cache[T] 分布式缓存实现。
 //
 // 与根包内存实现（LocalCache）的关系：根包 data/cache 只保留接口
 // （Cache/CacheAside/SourceFunc）与内存实现，本子包是 Redis 后端——
@@ -6,7 +6,7 @@
 //
 //	import (
 //		"github.com/oekit/data/cache"
-//		rediscache "github.com/oekit/redis/redis"
+//		rediscache "github.com/oekit/redisx/cache"
 //	)
 //
 //	c := rediscache.NewRedisCache[User](rdb, rediscache.RedisConfig[User]{
@@ -30,4 +30,4 @@
 // 写入入口不得写入以 \x00 开头的值——精确等于哨兵的条目按 null marker
 // 处理，其余 \x00 开头值不认作 null（走反序列化，默认 JSON 下报错）。
 // v0.4.0 前哨兵为 "__NULL__"，可被 SetRaw 精确碰撞（已废弃）。
-package redis
+package cache

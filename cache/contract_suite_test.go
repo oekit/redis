@@ -1,11 +1,11 @@
-package redis
+package cache
 
 // RedisCache 契约套件接入点：跑 github.com/oekit/data/cachetest 的 8 个
 // 通用场景（miss (nil,nil)、Set/Get 往返覆盖、显式 TTL 过期、Del/DelBatch
 // 幂等、GetOrLoad 回填计数、null marker 防穿透、Refresh、并发混合）。
 // 通用缓存语义由套件固化，本包不再重复编写。
 //
-// 本包为内部测试包（package redis）——cachetest import 的是 data/cache
+// 本包为内部测试包（package cache）——cachetest import 的是 data/cache
 // 被测接口，与本包无 import cycle，可直接接入。
 
 import (

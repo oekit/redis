@@ -1,4 +1,4 @@
-module github.com/oekit/redis
+module github.com/oekit/redisx
 
 go 1.26.0
 

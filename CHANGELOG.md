@@ -3,6 +3,20 @@
 由 ekit v0.34.0（git.enjoye.top/enjoydream/ekit，冻结维护）拆分而来。所有 notable 变更记录如下。
 
 
+
+## [v0.4.0] — 2026-10-16
+
+- **breaking（0.x minor）**：模块更名 `github.com/oekit/redis` → `github.com/oekit/redisx`，
+  消除与 go-redis（`package redis`）的包名撞车与 `/redis/redis` 路径口吃
+- 结构重排：原 `redisx` 子包上收为根包（`redisx.NewClientFromConfig` 等直接
+  `import "github.com/oekit/redisx"`）；原 `redis/` 子包更名 `cache/`（package cache，
+  `redis.RedisCache` → `cache.RedisCache`）；distlock/ratelimit 路径随之变为
+  `github.com/oekit/redisx/distlock`、`github.com/oekit/redisx/ratelimit`
+- 旧路径 `github.com/oekit/redis` 经 GitHub 重定向可拉取 ≤ v0.3.1（v0.3.1 为旧路径最后版本）
+- 迁移：import 路径机械替换 `github.com/oekit/redis/redisx` → `github.com/oekit/redisx`、
+  `github.com/oekit/redis/redis` → `github.com/oekit/redisx/cache`、
+  `github.com/oekit/redis/distlock|ratelimit` → `github.com/oekit/redisx/distlock|ratelimit`
+
 ## [v0.3.1] — 2026-10-16
 
 - ⚠️ 旧路径最后版本：模块已更名为 github.com/oekit/redisx（v0.4.0 起使用新路径）；
