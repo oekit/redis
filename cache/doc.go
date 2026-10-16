@@ -5,7 +5,7 @@
 // import 根包不再传递编译依赖 go-redis。
 //
 //	import (
-//		"github.com/oekit/data/cache"
+//		"github.com/oekit/pkg/cache"
 //		rediscache "github.com/oekit/redisx/cache"
 //	)
 //
@@ -19,7 +19,7 @@
 // 接口契约：RedisCache 对 data/cache 门面接口的满足由编译期断言固化
 // （redis.go 顶部 var 块，int/string 双类型实例化）；跨实现一致的通用
 // 缓存语义（miss 非 error、null marker 防穿透、Del 幂等、Refresh、并发
-// 混合等）由 github.com/oekit/data/cachetest 契约套件固化，本包
+// 混合等）由 github.com/oekit/pkg/cache/cachetest 契约套件固化，本包
 // contract_suite_test.go 接入（8 场景 × string/结构体双值类型）。
 //
 // 空值缓存语义（防穿透）见 RedisConfig.NullTTL 字段注释，与 LocalCache

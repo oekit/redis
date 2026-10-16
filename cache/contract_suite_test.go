@@ -1,6 +1,6 @@
 package cache
 
-// RedisCache 契约套件接入点：跑 github.com/oekit/data/cachetest 的 8 个
+// RedisCache 契约套件接入点：跑 github.com/oekit/pkg/cache/cachetest 的 8 个
 // 通用场景（miss (nil,nil)、Set/Get 往返覆盖、显式 TTL 过期、Del/DelBatch
 // 幂等、GetOrLoad 回填计数、null marker 防穿透、Refresh、并发混合）。
 // 通用缓存语义由套件固化，本包不再重复编写。
@@ -16,8 +16,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/oekit/data/cache"
-	cachetest "github.com/oekit/data/cachetest"
+	"github.com/oekit/pkg/cache"
+	cachetest "github.com/oekit/pkg/cache/cachetest"
 )
 
 // newContractCache 契约套件工厂：每个场景独立 miniredis + go-redis client

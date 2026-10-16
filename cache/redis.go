@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/oekit/data/cache"
+	"github.com/oekit/pkg/cache"
 	"github.com/oekit/logx"
 	"github.com/redis/go-redis/v9"
 )
@@ -53,7 +53,7 @@ type RedisCache[T any] struct {
 
 // 编译期接口契约：RedisCache 实现 data/cache 门面接口（泛型接口取具体
 // 类型实例化断言，int/string 双类型覆盖）。接口语义（miss 非 error、
-// null marker 防穿透、Del 幂等等）由 github.com/oekit/data/cachetest
+// null marker 防穿透、Del 幂等等）由 github.com/oekit/pkg/cache/cachetest
 // 契约套件跨实现固化，本包 contract_suite_test.go 接入。
 var (
 	_ cache.Cache[int]         = (*RedisCache[int])(nil)
