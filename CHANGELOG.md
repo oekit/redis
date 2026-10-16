@@ -4,6 +4,23 @@
 
 
 
+## [v0.7.0] — 2026-10-16
+
+- feat(cache): `RedisCache` 新增 `MGet` 批量读取（管道一次往返，实现
+  pkg/cache `BatchGetter[T]` 可选能力）——缺席语义与 (nil, nil) 双关一致：
+  不存在与 null marker（nullValue 哨兵精确识别）一律缺席，损坏条目按
+  miss（与 getInternal 口径一致）；纯读不回填不触发 Source；反序列化
+  失败整批报错；消费方（如 data/cached GetByIDs）对缺席键回退 GetOrLoad
+  享受 marker 短路，N 次往返收敛为 1 次
+- fix(ci): 修存量 lint——redis_test 两处 govet shadow + tokenlimit_test
+  SA4000（两次 Allow 有副作用但表达式字面相同，拆变量规避误报）
+- deps: github.com/oekit/pkg v0.4.0 → v0.6.0（BatchGetter 接口）
+
+## [v0.6.0] — 2026-10-16（补录）
+
+- feat(cache)!: 缓存接口引用迁移 pkg/cache——data 转门面前置手术
+  （接口住 pkg 下游，Redis 后端依赖接口）
+
 ## [v0.6.1] — 2026-10-16
 
 - fix(ratelimit): 探活应答形态校验——`probe()` 此前只检查 `Err()==nil`，探活脚本应答形态
