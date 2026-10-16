@@ -1,10 +1,16 @@
-# Changelog — oekit/redis
+# Changelog — oekit/redisx
 
 由 ekit v0.34.0（git.enjoye.top/enjoydream/ekit，冻结维护）拆分而来。所有 notable 变更记录如下。
 
 
 
-## [v0.4.0] — 2026-10-16
+## [v0.5.1] — 2026-10-17
+
+- **docs**：CHANGELOG 版本段勘误（改名段实为 v0.5.0，与 v0.4.0 契约段重名问题修正）；README 补
+  「规划」——cache 后端扩展模板（实现 data `CacheAside[T]` + 过 cachetest 契约套件）、两级缓存
+  （pubsub 失效广播）单独立项；cache 组成行补契约套件说明
+
+## [v0.5.0] — 2026-10-16
 
 - **breaking（0.x minor）**：模块更名 `github.com/oekit/redis` → `github.com/oekit/redisx`，
   消除与 go-redis（`package redis`）的包名撞车与 `/redis/redis` 路径口吃
@@ -17,10 +23,6 @@
   `github.com/oekit/redis/redis` → `github.com/oekit/redisx/cache`、
   `github.com/oekit/redis/distlock|ratelimit` → `github.com/oekit/redisx/distlock|ratelimit`
 
-## [v0.3.1] — 2026-10-16
-
-- ⚠️ 旧路径最后版本：模块已更名为 github.com/oekit/redisx（v0.4.0 起使用新路径）；
-  本版本代码与 v0.3.0 完全一致，仅 README 挂弃用通告
 
 ## [v0.4.0] — 2026-10-16
 
@@ -58,6 +60,13 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
 - `github.com/oekit/data` v0.3.3 → v0.4.0（v0.4.0 发布前本地经 go.work
   replace 解析）
 
+
+## [v0.3.1] — 2026-10-16
+
+- ⚠️ 旧路径最后版本：模块已更名为 github.com/oekit/redisx（v0.4.0 起使用新路径）；
+  本版本代码与 v0.3.0 完全一致，仅 README 挂弃用通告
+
+
 ## [v0.3.0] — 2026-10-16
 
 新增 `ratelimit/` 分布式限流子包（Lua 脚本与三态返回语义忠实移植 go-zero core/limit）。
@@ -79,6 +88,7 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
 - 新增直接依赖 `golang.org/x/time v0.16.0`（TokenLimiter 本地兜底，矩阵内与
   concurrency 同版本）；其余不变
 
+
 ## [v0.2.0] — 2026-10-15
 
 可观测性统一轮。
@@ -92,25 +102,31 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
   `redisotel.InstrumentTracing(c.Client())`（`github.com/oekit/tracing/redisotel`）；
   不需要的无需任何改动
 
+
 ## [v0.1.5] — 2026-10-15
 
 - v0.1.5
+
 
 ## [v0.1.4] — 2026-10-15
 
 - v0.1.4
 
+
 ## [v0.1.3] — 2026-10-15
 
 - v0.1.3
+
 
 ## [v0.1.2] — 2026-10-15
 
 - v0.1.2
 
+
 ## [v0.1.1] — 2026-10-15
 
 - v0.1.1
+
 
 ## [v0.1.0] — 2026-10-15
 
