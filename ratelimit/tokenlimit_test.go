@@ -144,8 +144,11 @@ func TestTokenLimiter_Refill_BackdatedTimestamp(t *testing.T) {
 	l := NewTokenLimiter(2, 2, store, "b2")
 	ctx := context.Background()
 
-	// 耗尽
-	if !l.Allow(ctx) || !l.Allow(ctx) {
+	// 耗尽（两次 Allow 各消耗一个令牌；拆变量规避 staticcheck SA4000 的
+	// "identical expressions" 误报——两次调用语义不同但有副作用）
+	firstAllow := l.Allow(ctx)
+	secondAllow := l.Allow(ctx)
+	if !firstAllow || !secondAllow {
 		t.Fatal("expected initial burst to be allowed")
 	}
 	if l.Allow(ctx) {
