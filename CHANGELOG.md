@@ -2,23 +2,13 @@
 
 由 ekit v0.34.0（git.enjoye.top/enjoydream/ekit，冻结维护）拆分而来。所有 notable 变更记录如下。
 
-
-
 ## [v0.7.5] — 2026-10-17
 
-- fix(deps): pkg 地板 v0.10.0 → v0.11.0；concurrency 地板 v0.5.3 → v0.5.4（v0.7.4 事故修正）
-
-## [v0.7.4] — 2026-10-17
-
-- pkg 地板 v0.11.0；concurrency 地板 v0.5.4
+- fix(deps): pkg 地板 v0.10.0 → v0.11.0；concurrency 地板 v0.5.3 → v0.5.4（事故版已撤）
 
 ## [v0.7.3] — 2026-10-17
 
-- fix(deps): pkg 地板 v0.9.3 → v0.10.0（拆分版，零代码改动）；concurrency 地板 v0.5.2 → v0.5.3（v0.7.2 事故修正）
-
-## [v0.7.2] — 2026-10-17
-
-- ⚠️ 发布事故：本版 CHANGELOG 误标 pkg v0.10.0 / concurrency v0.5.3 地板升级，实际未生效（go get 静默失败未拦住）；真实升级见 v0.7.3
+- fix(deps): pkg 地板 v0.9.3 → v0.10.0（拆分版，零代码改动）；concurrency 地板 v0.5.2 → v0.5.3（事故版已撤）
 
 ## [v0.7.1] — 2026-10-17
 
@@ -68,7 +58,6 @@
   `github.com/oekit/redis/redis` → `github.com/oekit/redisx/cache`、
   `github.com/oekit/redis/distlock|ratelimit` → `github.com/oekit/redisx/distlock|ratelimit`
 
-
 ## [v0.4.0] — 2026-10-16
 
 RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 哨兵碰撞修复。
@@ -105,12 +94,10 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
 - `github.com/oekit/data` v0.3.3 → v0.4.0（v0.4.0 发布前本地经 go.work
   replace 解析）
 
-
 ## [v0.3.1] — 2026-10-16
 
 - ⚠️ 旧路径最后版本：模块已更名为 github.com/oekit/redisx（v0.4.0 起使用新路径）；
   本版本代码与 v0.3.0 完全一致，仅 README 挂弃用通告
-
 
 ## [v0.3.0] — 2026-10-16
 
@@ -133,7 +120,6 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
 - 新增直接依赖 `golang.org/x/time v0.16.0`（TokenLimiter 本地兜底，矩阵内与
   concurrency 同版本）；其余不变
 
-
 ## [v0.2.0] — 2026-10-15
 
 可观测性统一轮。
@@ -147,11 +133,9 @@ RedisCache 后端契约化：接口断言 + cachetest 契约套件接入 + null 
   `redisotel.InstrumentTracing(c.Client())`（`github.com/oekit/tracing/redisotel`）；
   不需要的无需任何改动
 
-
 ## [v0.1.5] — 2026-10-15
 
 - v0.1.5
-
 
 ## [v0.1.0] — 2026-10-15
 
